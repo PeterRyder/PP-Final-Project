@@ -27,6 +27,7 @@ int g_commsize = -1;
 ARRAY_TYPE *g_array = NULL;
 
 void generate_array(ARRAY_TYPE **array);
+int compare (const void *a, const void *b);
 void sort(ARRAY_TYPE *array);
 void cleanup();
 
@@ -64,6 +65,8 @@ int main(int argc, char* argv[]) {
     /* how many ints each rank is responsible for */
     g_ints_per_rank = g_array_size / g_commsize;
 
+    g_array = calloc(g_ints_per_rank, sizeof(ARRAY_TYPE));
+
 #if DEBUG
     if (g_my_rank == 0)
     	printf("Ints per rank: %d\n", g_ints_per_rank);
@@ -91,11 +94,20 @@ int main(int argc, char* argv[]) {
 
 		/* pass array portions to ranks */
 
+		/* temporary until MPI passing is complete - this will work with 1 rank */
+		for (unsigned int i = 0; i < g_ints_per_rank; i++) {
+			g_array[i] = g_main_array[i];
+		}
 
 		free(g_main_array);
 	}
 
-	sort(g_array);
+	qsort(g_array, g_array_size, sizeof(ARRAY_TYPE), compare);
+
+	for (unsigned int i = 0; i < g_array_size; i++) {
+		printf("%u,", g_array[i]);
+	}
+	printf("\n");
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -117,8 +129,8 @@ void generate_array(ARRAY_TYPE **array) {
 	}
 }
 
-void sort(ARRAY_TYPE *array) {
-
+int compare (const void *a, const void *b) {
+  return (*(int*)a - *(int*)b);
 }
 
 /* destroys the array */
