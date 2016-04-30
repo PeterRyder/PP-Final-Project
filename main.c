@@ -26,8 +26,8 @@ int g_commsize = -1;
 
 ARRAY_TYPE *g_array = NULL;
 
-void generate_array();
-void print_array();
+void generate_array(ARRAY_TYPE **array);
+void sort(ARRAY_TYPE *array);
 void cleanup();
 
 int main(int argc, char* argv[]) {
@@ -81,12 +81,21 @@ int main(int argc, char* argv[]) {
 
     /* initialize the array with rank 0 */
 	if (g_my_rank == 0) {
-		generate_array();
+		ARRAY_TYPE *g_main_array = NULL;
+		generate_array(&g_main_array);
+
+		for (unsigned int i = 0; i < g_array_size; i++) {
+			printf("%u,", g_main_array[i]);
+		}
+		printf("\n");
+
+		/* pass array portions to ranks */
+
+
+		free(g_main_array);
 	}
 
-#if DEBUG
-	print_array();
-#endif
+	sort(g_array);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -94,27 +103,22 @@ int main(int argc, char* argv[]) {
    		cleanup();
     }
     
-
  	MPI_Finalize();
 
 	return 0;
 }
 
 /* generates a random unsorted array */
-void generate_array() {
-	g_array = calloc(g_array_size, sizeof(ARRAY_TYPE));
+void generate_array(ARRAY_TYPE **array) {
+	*array = calloc(g_array_size, sizeof(ARRAY_TYPE));
 
 	for (unsigned int i = 0; i < g_array_size; i++) {
-		g_array[i] = GenVal(g_my_rank) * MULTIPLIER;
+		(*array)[i] = GenVal(g_my_rank) * MULTIPLIER;
 	}
 }
 
-/* prints the array - only helpful with small debug runs */
-void print_array() {
-	for (unsigned int i = 0; i < g_array_size; i++) {
-		printf("%d,", g_array[i]);
-	}
-	printf("\n");
+void sort(ARRAY_TYPE *array) {
+
 }
 
 /* destroys the array */
