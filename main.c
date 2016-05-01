@@ -17,6 +17,11 @@
 
 #define ARRAY_TYPE unsigned int
 #define MULTIPLIER 1000
+#define bg_env 0
+
+#if bg_env
+#include <hwi/include/bqc/A2_inlines.h>
+#endif
 
 unsigned int g_array_size = 0;
 unsigned int g_ints_per_rank = 0;
@@ -25,6 +30,9 @@ int g_my_rank = -1;
 int g_commsize = -1;
 
 ARRAY_TYPE *g_array = NULL;
+
+unsigned long long start_cycle_time = 0;
+unsigned long long end_cycle_time = 0;
 
 void generate_array(ARRAY_TYPE **array);
 int compare (const void *a, const void *b);
@@ -82,17 +90,18 @@ int main(int argc, char* argv[]) {
         g_my_rank, g_commsize, GenVal(g_my_rank));
 #endif
 
+    /* start the timer */
+#if bg_env
+    if (g_my_rank == 0)
+    	start_cycle_time = GetTimeBase();
+#endif
+
     /* initialize the array with rank 0 */
 	if (g_my_rank == 0) {
 		ARRAY_TYPE *g_main_array = NULL;
 		generate_array(&g_main_array);
 
-		for (unsigned int i = 0; i < g_array_size; i++) {
-			printf("%u,", g_main_array[i]);
-		}
-		printf("\n");
-
-		/* pass array portions to ranks */
+		/* TODO: pass array portions to ranks here */
 
 		/* temporary until MPI passing is complete - this will work with 1 rank */
 		for (unsigned int i = 0; i < g_ints_per_rank; i++) {
@@ -104,16 +113,25 @@ int main(int argc, char* argv[]) {
 
 	qsort(g_array, g_array_size, sizeof(ARRAY_TYPE), compare);
 
+#if bg_env
+	if (g_my_rank == 0)
+    	end_cycle_time = GetTimeBase();
+#endif
+
+#if DEBUG
 	for (unsigned int i = 0; i < g_array_size; i++) {
 		printf("%u,", g_array[i]);
 	}
 	printf("\n");
+#endif
 
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (g_my_rank == 0) {
    		cleanup();
     }
+
+    printf("Completed in: %llu\n", end_cycle_time - start_cycle_time);
     
  	MPI_Finalize();
 
