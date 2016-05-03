@@ -101,17 +101,40 @@ int main(int argc, char* argv[]) {
 		ARRAY_TYPE *g_main_array = NULL;
 		generate_array(&g_main_array);
 
-		/* TODO: pass array portions to ranks here */
-
-		/* temporary until MPI passing is complete - this will work with 1 rank */
-		for (unsigned int i = 0; i < g_ints_per_rank; i++) {
-			g_array[i] = g_main_array[i];
+		for (int i = 0; i < g_array_size; i++) {
+			printf("%d,", g_main_array[i]);
 		}
+		printf("\n");
 
-		free(g_main_array);
+		for (int i = 0; i < g_commsize; i++) {
+			MPI_Status status;
+
+			int starting_index = (g_array_size / g_commsize) * i;
+			printf("Starting index: %d\n", starting_index);
+			printf("Sending to: %d\n", i);
+
+			MPI_Isend(&(g_main_array[starting_index]), g_ints_per_rank, 
+				MPI_UNSIGNED, i, i, MPI_COMM_WORLD, &status);
+		}
+		//free(g_main_array);
 	}
 
+	MPI_Request receive;
+	MPI_Status status;
+	
+	MPI_Irecv(g_array, g_ints_per_rank, MPI_UNSIGNED, 
+		0, g_my_rank, MPI_COMM_WORLD, &receive);
+
+	printf("%d Got receive\n", g_my_rank);
+
+	MPI_Wait(&receive, &status);
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
 	qsort(g_array, g_array_size, sizeof(ARRAY_TYPE), compare);
+
+
+	/* pass arrays back to rank 0 */
 
 #if bg_env
 	if (g_my_rank == 0)
@@ -119,7 +142,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 #if DEBUG
-	for (unsigned int i = 0; i < g_array_size; i++) {
+	for (unsigned int i = 0; i < g_ints_per_rank; i++) {
 		printf("%u,", g_array[i]);
 	}
 	printf("\n");
@@ -128,11 +151,13 @@ int main(int argc, char* argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (g_my_rank == 0) {
-   		cleanup();
+   		//cleanup();
     }
 
+#if bg_env
     printf("Completed in: %llu\n", end_cycle_time - start_cycle_time);
-    
+#endif
+
  	MPI_Finalize();
 
 	return 0;
@@ -140,7 +165,7 @@ int main(int argc, char* argv[]) {
 
 /* generates a random unsorted array */
 void generate_array(ARRAY_TYPE **array) {
-	*array = calloc(g_array_size, sizeof(ARRAY_TYPE));
+	*array = calloc(g_ints_per_rank, sizeof(ARRAY_TYPE));
 
 	for (unsigned int i = 0; i < g_array_size; i++) {
 		(*array)[i] = GenVal(g_my_rank) * MULTIPLIER;
