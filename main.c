@@ -101,20 +101,20 @@ int main(int argc, char* argv[]) {
 		ARRAY_TYPE *g_main_array = NULL;
 		generate_array(&g_main_array);
 
-		for (int i = 0; i < g_array_size; i++) {
+		for (unsigned int i = 0; i < g_array_size; i++) {
 			printf("%d,", g_main_array[i]);
 		}
 		printf("\n");
 
 		for (int i = 0; i < g_commsize; i++) {
-			MPI_Status status;
+			MPI_Request status;
 
 			int starting_index = (g_array_size / g_commsize) * i;
 			printf("Starting index: %d\n", starting_index);
 			printf("Sending to: %d\n", i);
 
-			MPI_Isend(&(g_main_array[starting_index]), g_ints_per_rank, 
-				MPI_UNSIGNED, i, i, MPI_COMM_WORLD, &status);
+			MPI_Isend(&g_main_array[starting_index], g_ints_per_rank, 
+				MPI_UNSIGNED, i, 1, MPI_COMM_WORLD, &status);
 		}
 		//free(g_main_array);
 	}
@@ -123,16 +123,15 @@ int main(int argc, char* argv[]) {
 	MPI_Status status;
 	
 	MPI_Irecv(g_array, g_ints_per_rank, MPI_UNSIGNED, 
-		0, g_my_rank, MPI_COMM_WORLD, &receive);
-
-	printf("%d Got receive\n", g_my_rank);
+		0, 1, MPI_COMM_WORLD, &receive);
 
 	MPI_Wait(&receive, &status);
 
+	printf("%d Got receive\n", g_my_rank);
+
 	MPI_Barrier(MPI_COMM_WORLD);
 
-	qsort(g_array, g_array_size, sizeof(ARRAY_TYPE), compare);
-
+	qsort(g_array, g_ints_per_rank, sizeof(ARRAY_TYPE), compare);
 
 	/* pass arrays back to rank 0 */
 
@@ -159,6 +158,8 @@ int main(int argc, char* argv[]) {
 #endif
 
  	MPI_Finalize();
+
+ 	printf("test\n");
 
 	return 0;
 }
