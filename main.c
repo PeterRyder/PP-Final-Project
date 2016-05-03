@@ -30,6 +30,7 @@ int g_my_rank = -1;
 int g_commsize = -1;
 
 ARRAY_TYPE *g_array = NULL;
+ARRAY_TYPE *g_main_array = NULL;
 
 unsigned long long start_cycle_time = 0;
 unsigned long long end_cycle_time = 0;
@@ -97,8 +98,7 @@ int main(int argc, char* argv[]) {
 #endif
 
     /* initialize the array with rank 0 */
-	if (g_my_rank == 0) {
-		ARRAY_TYPE *g_main_array = NULL;
+	if (g_my_rank == 0) {		
 		generate_array(&g_main_array);
 
 		for (unsigned int i = 0; i < g_array_size; i++) {
@@ -116,7 +116,6 @@ int main(int argc, char* argv[]) {
 			MPI_Isend(&g_main_array[starting_index], g_ints_per_rank, 
 				MPI_UNSIGNED, i, 1, MPI_COMM_WORLD, &status);
 		}
-		//free(g_main_array);
 	}
 
 	MPI_Request receive;
@@ -150,7 +149,7 @@ int main(int argc, char* argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (g_my_rank == 0) {
-   		//cleanup();
+   		cleanup();
     }
 
 #if bg_env
@@ -180,4 +179,5 @@ int compare (const void *a, const void *b) {
 /* destroys the array */
 void cleanup() {
 	free(g_array);
+	//free(g_main_array);
 }
