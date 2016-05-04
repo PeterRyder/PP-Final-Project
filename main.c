@@ -29,7 +29,7 @@ unsigned int g_ints_per_rank = 0;
 int g_my_rank = -1;
 int g_commsize = -1;
 
-ARRAY_TYPE *g_array = NULL;
+//ARRAY_TYPE *g_array = NULL;
 ARRAY_TYPE *g_main_array = NULL;
 
 unsigned long long start_cycle_time = 0;
@@ -38,13 +38,14 @@ unsigned long long end_cycle_time = 0;
 void generate_array(ARRAY_TYPE **array);
 int compare (const void *a, const void *b);
 void sort(ARRAY_TYPE *array);
+ARRAY_TYPE *merge(ARRAY_TYPE *A, ARRAY_TYPE *B, int a_size, int b_size); 
 void cleanup();
 
 int main(int argc, char* argv[]) {
 
 	if (argc != 2) {
 		printf("Wrong arguments\n");
-		printf("usage: assignment4 [matrix_size]");
+		printf("usage: assignment4 [matrix_size]\n");
 		return -1;
 	}
 
@@ -73,8 +74,7 @@ int main(int argc, char* argv[]) {
 
     /* how many ints each rank is responsible for */
     g_ints_per_rank = g_array_size / g_commsize;
-
-    g_array = calloc(g_ints_per_rank, sizeof(ARRAY_TYPE));
+    ARRAY_TYPE *g_array = malloc(g_ints_per_rank * sizeof(ARRAY_TYPE));
 
 #if DEBUG
     if (g_my_rank == 0)
@@ -115,6 +115,7 @@ int main(int argc, char* argv[]) {
 
 			MPI_Isend(&g_main_array[starting_index], g_ints_per_rank, 
 				MPI_UNSIGNED, i, 1, MPI_COMM_WORLD, &status);
+			MPI_Request_free(&status);
 		}
 	}
 
@@ -130,9 +131,24 @@ int main(int argc, char* argv[]) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
-	qsort(g_array, g_ints_per_rank, sizeof(ARRAY_TYPE), compare);
+	qsort(g_array, g_ints_per_rank, sizeof *g_array, compare);
 
 	/* pass arrays back to rank 0 */
+	MPI_Request request;
+	MPI_Isend(g_array, g_ints_per_rank, MPI_UNSIGNED, 0, 2, MPI_COMM_WORLD, &request);
+	MPI_Request_free(&request);
+	MPI_Barrier(MPI_COMM_WORLD);
+	if (g_my_rank == 0)
+	{
+		ARRAY_TYPE ** recieved_arrays = malloc(g_commsize * sizeof(ARRAY_TYPE*));
+		for(int i = 0; i < g_commsize; i++)
+		{
+			recieved_arrays[i] = malloc(g_ints_per_rank * sizeof(ARRAY_TYPE));
+			MPI_Irecv(recieved_arrays[i], g_ints_per_rank, MPI_UNSIGNED, i, 2, MPI_COMM_WORLD, &receive);
+		}
+		//free(g_main_array);
+		g_main_array = merge(recieved_arrays[0], recieved_arrays[1], g_ints_per_rank, g_ints_per_rank);
+	}
 
 #if bg_env
 	if (g_my_rank == 0)
@@ -146,8 +162,17 @@ int main(int argc, char* argv[]) {
 	printf("\n");
 #endif
 
-    MPI_Barrier(MPI_COMM_WORLD);
+#if DEBUG
+	if(g_my_rank == 0){
+	for (unsigned int i = 0; i < g_array_size; i++) {
+		printf("%u,", g_main_array[i]);
+	}
+	printf("\n");
+}
+#endif
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    //free(g_array);
     if (g_my_rank == 0) {
    		cleanup();
     }
@@ -178,6 +203,61 @@ int compare (const void *a, const void *b) {
 
 /* destroys the array */
 void cleanup() {
-	free(g_array);
-	//free(g_main_array);
+	//free(g_array);
+	free(g_main_array);
 }
+
+/* Merge two given arrays */
+ARRAY_TYPE *merge(ARRAY_TYPE *A, ARRAY_TYPE *B, int a_size, int b_size) 
+{
+	int a_iter = 0; 
+	int b_iter = 0;
+	int c_iter = 0;
+        int c_size = a_size + b_size;
+
+	// Create output array that is the size of both inputs
+	ARRAY_TYPE *C = (ARRAY_TYPE *)malloc(c_size * sizeof(ARRAY_TYPE));
+        while( (a_iter < a_size) && (b_iter < b_size))
+	{
+		// if next element in A is smaller insert it
+		if(A[a_iter] <= B[b_iter])
+		{
+			C[c_iter] = A[a_iter];
+        printf("\ninsert A[%d] = %d into C[%d] = %d\n", a_iter, A[a_iter], c_iter, C[c_iter]);
+			a_iter++;
+			c_iter++;
+		}
+		// otherwise the element in B is lower so insert it
+		else
+		{
+			C[c_iter] = B[b_iter];
+        printf("\ninsert B[%d] = %d into C[%d] = %d\n", b_iter, B[b_iter], c_iter, C[c_iter]);
+			b_iter++;
+			c_iter++;
+		}
+	}
+	// Add the rest of the elements in the unfinished list
+	if (a_iter >= a_size)
+	{
+		for (; c_iter < c_size; b_iter++)
+		{
+			C[c_iter] = B[b_iter];
+			c_iter++;
+		}
+	}
+	else if (b_iter >= b_size)
+	{
+		for (; c_iter < c_size; a_iter++)
+		{
+			C[c_iter] = A[a_iter];
+			c_iter++;
+		}
+	}
+
+	//theoretically free A and B?
+	//free(A);
+	//free(B);
+
+	return C;
+}
+
