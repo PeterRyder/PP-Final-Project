@@ -36,6 +36,7 @@ unsigned long long start_cycle_time = 0;
 unsigned long long end_cycle_time = 0;
 
 void generate_array(ARRAY_TYPE **array);
+void print_array(ARRAY_TYPE* A, int size, int rank);
 int compare (const void *a, const void *b);
 void sort(ARRAY_TYPE *array);
 ARRAY_TYPE *merge(ARRAY_TYPE *A, ARRAY_TYPE *B, int a_size, int b_size); 
@@ -119,13 +120,19 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	MPI_Request receive;
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	MPI_Request request;
 	MPI_Status status;
 	
 	MPI_Irecv(g_array, g_ints_per_rank, MPI_UNSIGNED, 
-		0, 1, MPI_COMM_WORLD, &receive);
+		0, 1, MPI_COMM_WORLD, &request);
 
-	MPI_Wait(&receive, &status);
+	MPI_Wait(&request, &status);
+
+#if DEBUG
+	print_array(g_array, g_ints_per_rank, g_my_rank);
+#endif
 
 	printf("%d Got receive\n", g_my_rank);
 
@@ -133,9 +140,42 @@ int main(int argc, char* argv[]) {
 
 	qsort(g_array, g_ints_per_rank, sizeof *g_array, compare);
 
+	int step = 1;
+	int cur_size = g_ints_per_rank;
+	while(step < g_commsize)
+	{
+		if(g_my_rank % (2 * step) == 0)
+		{
+			if(g_my_rank + step < g_commsize)
+			{
+				int recv_size = 0;
+				MPI_Irecv(&recv_size, 1, MPI_INT, g_my_rank + step, 0, MPI_COMM_WORLD, &request);
+				MPI_Wait(&request, &status);
+				ARRAY_TYPE *temp = (ARRAY_TYPE *)malloc(recv_size * sizeof(ARRAY_TYPE));
+				MPI_Irecv(temp, recv_size, MPI_UNSIGNED, g_my_rank + step, 1, MPI_COMM_WORLD, &request);
+				MPI_Wait(&request, &status);
+				g_array = merge(g_array, temp, cur_size, recv_size);
+				cur_size = cur_size + recv_size;
+			}
+		}
+		else
+		{
+			int send_loc = g_my_rank - step;
+			MPI_Isend(&cur_size, 1, MPI_INT, send_loc, 0, MPI_COMM_WORLD, &request);
+			MPI_Request_free(&request);
+			MPI_Isend(g_array, cur_size, MPI_UNSIGNED, send_loc, 1, MPI_COMM_WORLD, &request);
+			MPI_Request_free(&request);
+			break;
+		}
+		step = step*2;
+	}
+	if(g_my_rank == 0)
+	{
+		g_main_array = g_array;
+	}
+
 	/* pass arrays back to rank 0 */
-	MPI_Request request;
-	MPI_Isend(g_array, g_ints_per_rank, MPI_UNSIGNED, 0, 2, MPI_COMM_WORLD, &request);
+/*	MPI_Isend(g_array, g_ints_per_rank, MPI_UNSIGNED, 0, 2, MPI_COMM_WORLD, &request);
 	MPI_Request_free(&request);
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (g_my_rank == 0)
@@ -146,9 +186,16 @@ int main(int argc, char* argv[]) {
 			recieved_arrays[i] = malloc(g_ints_per_rank * sizeof(ARRAY_TYPE));
 			MPI_Irecv(recieved_arrays[i], g_ints_per_rank, MPI_UNSIGNED, i, 2, MPI_COMM_WORLD, &receive);
 		}
+		int cur_size = g_ints_per_rank;
 		//free(g_main_array);
-		g_main_array = merge(recieved_arrays[0], recieved_arrays[1], g_ints_per_rank, g_ints_per_rank);
+		g_main_array = recieved_arrays[0];
+		for(int i = 1; i < g_commsize; i++)
+		{
+			g_main_array = merge(g_main_array, recieved_arrays[1], cur_size, g_ints_per_rank);
+			cur_size += g_ints_per_rank;
+		}
 	}
+*/
 
 #if bg_env
 	if (g_my_rank == 0)
@@ -156,19 +203,16 @@ int main(int argc, char* argv[]) {
 #endif
 
 #if DEBUG
-	for (unsigned int i = 0; i < g_ints_per_rank; i++) {
-		printf("%u,", g_array[i]);
-	}
-	printf("\n");
+	print_array(g_array, g_ints_per_rank, g_my_rank);
 #endif
 
 #if DEBUG
+    	MPI_Barrier(MPI_COMM_WORLD);
 	if(g_my_rank == 0){
-	for (unsigned int i = 0; i < g_array_size; i++) {
-		printf("%u,", g_main_array[i]);
+		printf("\n\nFinal sorted Array:\n");
+		print_array(g_main_array, g_array_size, g_my_rank);
+		printf("\n\n");
 	}
-	printf("\n");
-}
 #endif
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -182,8 +226,6 @@ int main(int argc, char* argv[]) {
 #endif
 
  	MPI_Finalize();
-
- 	printf("test\n");
 
 	return 0;
 }
@@ -223,7 +265,7 @@ ARRAY_TYPE *merge(ARRAY_TYPE *A, ARRAY_TYPE *B, int a_size, int b_size)
 		if(A[a_iter] <= B[b_iter])
 		{
 			C[c_iter] = A[a_iter];
-        printf("\ninsert A[%d] = %d into C[%d] = %d\n", a_iter, A[a_iter], c_iter, C[c_iter]);
+ //       printf("\ninsert A[%d] = %d into C[%d] = %d\n", a_iter, A[a_iter], c_iter, C[c_iter]);
 			a_iter++;
 			c_iter++;
 		}
@@ -231,7 +273,7 @@ ARRAY_TYPE *merge(ARRAY_TYPE *A, ARRAY_TYPE *B, int a_size, int b_size)
 		else
 		{
 			C[c_iter] = B[b_iter];
-        printf("\ninsert B[%d] = %d into C[%d] = %d\n", b_iter, B[b_iter], c_iter, C[c_iter]);
+//        printf("\ninsert B[%d] = %d into C[%d] = %d\n", b_iter, B[b_iter], c_iter, C[c_iter]);
 			b_iter++;
 			c_iter++;
 		}
@@ -259,5 +301,14 @@ ARRAY_TYPE *merge(ARRAY_TYPE *A, ARRAY_TYPE *B, int a_size, int b_size)
 	//free(B);
 
 	return C;
+}
+
+void print_array(ARRAY_TYPE* A, int size, int rank)
+{
+	printf("rank %d: ", rank);
+	for (int i = 0; i < size; i++) {
+		printf("%u,", A[i]);
+	}
+	printf("\n");
 }
 
