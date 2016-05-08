@@ -42,7 +42,7 @@ clock_t start;
 clock_t end;
 #endif
 
-void generate_array(ARRAY_TYPE **array);
+void generate_array(ARRAY_TYPE *array);
 void print_array(ARRAY_TYPE* A, int size, int rank);
 int compare (const void *a, const void *b);
 void sort(ARRAY_TYPE *array);
@@ -107,7 +107,8 @@ int main(int argc, char* argv[]) {
 
     /* initialize the array with rank 0 */
 	if (g_my_rank == 0) {		
-		generate_array(&g_main_array);
+		g_main_array = malloc( g_array_size * sizeof(ARRAY_TYPE));
+		generate_array(g_main_array);
 		for (int i = 0; i < g_commsize; i++) {
 			MPI_Request status;
 
@@ -116,7 +117,7 @@ int main(int argc, char* argv[]) {
 			//printf("Sending to: %d\n", i);
 
 			MPI_Isend(&g_main_array[starting_index], g_ints_per_rank, 
-				MPI_UNSIGNED, i, 1, MPI_COMM_WORLD, &status);
+				MPI_UNSIGNED, i, 0, MPI_COMM_WORLD, &status);
 			MPI_Request_free(&status);
 		}
 	}
@@ -127,7 +128,7 @@ int main(int argc, char* argv[]) {
 	MPI_Status status;
 	
 	MPI_Irecv(g_array, g_ints_per_rank, MPI_UNSIGNED, 
-		0, 1, MPI_COMM_WORLD, &request);
+		0, 0, MPI_COMM_WORLD, &request);
 
 	MPI_Wait(&request, &status);
 
@@ -243,11 +244,9 @@ int main(int argc, char* argv[]) {
 }
 
 /* generates a random unsorted array */
-void generate_array(ARRAY_TYPE **array) {
-	*array = calloc(g_ints_per_rank, sizeof(ARRAY_TYPE));
-
+void generate_array(ARRAY_TYPE *array) {
 	for (unsigned int i = 0; i < g_array_size; i++) {
-		(*array)[i] = GenVal(g_my_rank) * MULTIPLIER;
+		array[i] = GenVal(g_my_rank) * MULTIPLIER;
 	}
 }
 
@@ -323,4 +322,5 @@ void print_array(ARRAY_TYPE* A, int size, int rank)
 	}
 	printf("\n");
 }
+
 
