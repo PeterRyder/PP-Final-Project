@@ -21,6 +21,8 @@
 
 #if bg_env
 #include <hwi/include/bqc/A2_inlines.h>
+#else
+#include <time.h>
 #endif
 
 unsigned int g_array_size = 0;
@@ -32,8 +34,13 @@ int g_commsize = -1;
 //ARRAY_TYPE *g_array = NULL;
 ARRAY_TYPE *g_main_array = NULL;
 
+#if bg_env
 unsigned long long start_cycle_time = 0;
 unsigned long long end_cycle_time = 0;
+#else
+clock_t start;
+clock_t end;
+#endif
 
 void generate_array(ARRAY_TYPE **array);
 void print_array(ARRAY_TYPE* A, int size, int rank);
@@ -87,32 +94,26 @@ int main(int argc, char* argv[]) {
 		printf("Running simulation with %d ranks\n", g_commsize);
 #endif
 
-#if DEBUG
-    printf("Rank %d of %d has been started and a first Random Value of %lf\n", 
-        g_my_rank, g_commsize, GenVal(g_my_rank));
-#endif
-
     /* start the timer */
+    if (g_my_rank == 0) {
 #if bg_env
-    if (g_my_rank == 0)
     	start_cycle_time = GetTimeBase();
-#endif
+#else 
+		start = clock();
+#endif    	
+    }
+
+
 
     /* initialize the array with rank 0 */
 	if (g_my_rank == 0) {		
 		generate_array(&g_main_array);
-
-		for (unsigned int i = 0; i < g_array_size; i++) {
-			printf("%d,", g_main_array[i]);
-		}
-		printf("\n");
-
 		for (int i = 0; i < g_commsize; i++) {
 			MPI_Request status;
 
 			int starting_index = (g_array_size / g_commsize) * i;
-			printf("Starting index: %d\n", starting_index);
-			printf("Sending to: %d\n", i);
+			//printf("Starting index: %d\n", starting_index);
+			//printf("Sending to: %d\n", i);
 
 			MPI_Isend(&g_main_array[starting_index], g_ints_per_rank, 
 				MPI_UNSIGNED, i, 1, MPI_COMM_WORLD, &status);
@@ -134,7 +135,7 @@ int main(int argc, char* argv[]) {
 	print_array(g_array, g_ints_per_rank, g_my_rank);
 #endif
 
-	printf("%d Got receive\n", g_my_rank);
+	//printf("%d Got receive\n", g_my_rank);
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
@@ -197,10 +198,14 @@ int main(int argc, char* argv[]) {
 	}
 */
 
+	if (g_my_rank == 0) {
 #if bg_env
-	if (g_my_rank == 0)
     	end_cycle_time = GetTimeBase();
-#endif
+#else
+    	end = clock();
+#endif	
+	}
+
 
 #if DEBUG
 	print_array(g_array, g_ints_per_rank, g_my_rank);
@@ -221,9 +226,16 @@ int main(int argc, char* argv[]) {
    		cleanup();
     }
 
+	if (g_my_rank == 0) {
 #if bg_env
-    printf("Completed in: %llu\n", end_cycle_time - start_cycle_time);
-#endif
+	    printf("Completed in: %llu\n", end_cycle_time - start_cycle_time);
+#else
+		clock_t diff = end - start;
+		int msec = diff * 1000 / CLOCKS_PER_SEC;
+		printf("Time taken %d seconds %d milliseconds\n", msec/1000, msec%1000);
+#endif	
+	}
+
 
  	MPI_Finalize();
 
