@@ -127,7 +127,7 @@ int main(int argc, char* argv[]) {
 
     /* initialize the array with rank 0 */
 	if (g_my_rank == 0) {
-		
+
 		/* inialize array memory */	
 		g_main_array = malloc( g_array_size * sizeof(ARRAY_TYPE));
 
@@ -195,6 +195,7 @@ int main(int argc, char* argv[]) {
 		g_main_array = g_array;
 	}
 
+	/* stop the timer */
 	if (g_my_rank == 0) {
 #if bg_env
     	end_cycle_time = GetTimeBase();
@@ -205,6 +206,7 @@ int main(int argc, char* argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
+    /* destroy the allocated memory */
     if (g_my_rank == 0) {
    		cleanup();
     }
