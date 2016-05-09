@@ -15,25 +15,35 @@
 #include "clcg4.h"
 #include <mpi.h>
 
+/* array storage type */
 #define ARRAY_TYPE unsigned int
+
+/* numbers will be generated between 0 and 1000 */
 #define MULTIPLIER 1000
+
+/* if we are running in the blue gene environment */
 #define bg_env 0
 
+/* load the proper timer for the environment */
 #if bg_env
 #include <hwi/include/bqc/A2_inlines.h>
 #else
 #include <time.h>
 #endif
 
+/* size of the combined array */
 unsigned int g_array_size = 0;
+
+/* number of elements to sort per rank */
 unsigned int g_ints_per_rank = 0;
 
 int g_my_rank = -1;
 int g_commsize = -1;
 
-//ARRAY_TYPE *g_array = NULL;
+/* the combined array pointer */
 ARRAY_TYPE *g_main_array = NULL;
 
+/* timers for the proper environment */
 #if bg_env
 unsigned long long start_cycle_time = 0;
 unsigned long long end_cycle_time = 0;
@@ -42,11 +52,22 @@ clock_t start;
 clock_t end;
 #endif
 
+/* generates a random array */
 void generate_array(ARRAY_TYPE *array);
+
+/* debug to print the array */
 void print_array(ARRAY_TYPE* A, int size, int rank);
+
+/* comparison function for sorting */
 int compare (const void *a, const void *b);
+
+/* sorting function */
 void sort(ARRAY_TYPE *array);
+
+/* merges two arrays together and sorts */
 ARRAY_TYPE *merge(ARRAY_TYPE *A, ARRAY_TYPE *B, int a_size, int b_size); 
+
+/* destroys the allocated memory */
 void cleanup();
 
 int main(int argc, char* argv[]) {
@@ -65,6 +86,7 @@ int main(int argc, char* argv[]) {
 	}
 #endif
 
+	/* the size of the combined array */
 	g_array_size = atoi(argv[1]);
 
 	if (g_array_size <= 0) {
@@ -103,19 +125,21 @@ int main(int argc, char* argv[]) {
 #endif    	
     }
 
-
-
     /* initialize the array with rank 0 */
-	if (g_my_rank == 0) {		
+	if (g_my_rank == 0) {
+		
+		/* inialize array memory */	
 		g_main_array = malloc( g_array_size * sizeof(ARRAY_TYPE));
+
+		/* generate the main array */
 		generate_array(g_main_array);
 		for (int i = 0; i < g_commsize; i++) {
 			MPI_Request status;
 
+			/* find the index of the array to send */
 			int starting_index = (g_array_size / g_commsize) * i;
-			//printf("Starting index: %d\n", starting_index);
-			//printf("Sending to: %d\n", i);
 
+			/* send piece to rank */
 			MPI_Isend(&g_main_array[starting_index], g_ints_per_rank, 
 				MPI_UNSIGNED, i, 0, MPI_COMM_WORLD, &status);
 			MPI_Request_free(&status);
@@ -132,14 +156,9 @@ int main(int argc, char* argv[]) {
 
 	MPI_Wait(&request, &status);
 
-#if DEBUG
-	print_array(g_array, g_ints_per_rank, g_my_rank);
-#endif
-
-	//printf("%d Got receive\n", g_my_rank);
-
 	MPI_Barrier(MPI_COMM_WORLD);
 
+	/* sort the piece of the array */
 	qsort(g_array, g_ints_per_rank, sizeof *g_array, compare);
 
 	int step = 1;
@@ -176,29 +195,6 @@ int main(int argc, char* argv[]) {
 		g_main_array = g_array;
 	}
 
-	/* pass arrays back to rank 0 */
-/*	MPI_Isend(g_array, g_ints_per_rank, MPI_UNSIGNED, 0, 2, MPI_COMM_WORLD, &request);
-	MPI_Request_free(&request);
-	MPI_Barrier(MPI_COMM_WORLD);
-	if (g_my_rank == 0)
-	{
-		ARRAY_TYPE ** recieved_arrays = malloc(g_commsize * sizeof(ARRAY_TYPE*));
-		for(int i = 0; i < g_commsize; i++)
-		{
-			recieved_arrays[i] = malloc(g_ints_per_rank * sizeof(ARRAY_TYPE));
-			MPI_Irecv(recieved_arrays[i], g_ints_per_rank, MPI_UNSIGNED, i, 2, MPI_COMM_WORLD, &receive);
-		}
-		int cur_size = g_ints_per_rank;
-		//free(g_main_array);
-		g_main_array = recieved_arrays[0];
-		for(int i = 1; i < g_commsize; i++)
-		{
-			g_main_array = merge(g_main_array, recieved_arrays[1], cur_size, g_ints_per_rank);
-			cur_size += g_ints_per_rank;
-		}
-	}
-*/
-
 	if (g_my_rank == 0) {
 #if bg_env
     	end_cycle_time = GetTimeBase();
@@ -207,37 +203,22 @@ int main(int argc, char* argv[]) {
 #endif	
 	}
 
-
-#if DEBUG
-	print_array(g_array, g_ints_per_rank, g_my_rank);
-#endif
-
-#if DEBUG
-    	MPI_Barrier(MPI_COMM_WORLD);
-	if(g_my_rank == 0){
-		printf("\n\nFinal sorted Array:\n");
-		print_array(g_main_array, g_array_size, g_my_rank);
-		printf("\n\n");
-	}
-#endif
-
     MPI_Barrier(MPI_COMM_WORLD);
-    //free(g_array);
+
     if (g_my_rank == 0) {
    		cleanup();
     }
 
+    /* output the results */
 	if (g_my_rank == 0) {
 #if bg_env
 	    printf("Completed in: %llu\n", end_cycle_time - start_cycle_time);
 #else
-		clock_t diff = end - start;
-		int msec = diff * 1000 / CLOCKS_PER_SEC;
-		printf("Time taken %d seconds %d milliseconds\n", msec/1000, msec%1000);
+		printf("Completed in: %Lf\n", (long double)(end - start));
 #endif	
 	}
 
-
+	/* Finalize the MPI tasks */
  	MPI_Finalize();
 
 	return 0;
@@ -250,6 +231,7 @@ void generate_array(ARRAY_TYPE *array) {
 	}
 }
 
+/* compare function for sorting */
 int compare (const void *a, const void *b) {
   return (*(int*)a - *(int*)b);
 }
