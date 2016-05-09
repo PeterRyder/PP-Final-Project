@@ -1,4 +1,4 @@
-// Assignment 4/5
+// Final Project
 // Peter Ryder, Brian Kovacik, Matt Holmes
 
 /* INCLUDES */
