@@ -1,0 +1,14 @@
+Parallel Programming Final Project
+
+Peter Ryder, Brian Kovacik, Matt Holmes
+
+We designed a parallel implementation of merge sort. The code can
+be found in the code folder of this directory. Images of results
+can be found in the images directory. The spreadsheet containing
+our results can be found in the data.xlsx file. Finally, our final
+report can be found in the report.pdf file.
+
+Our code compiles on Linux, Windows, and the Blue Gene. Simply run
+make within the code directory, and gcc and mpicc will compile
+an executable. The program expects 1 argument which is the array
+size.
